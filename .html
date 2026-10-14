@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>公費與生活記帳</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700&family=Varela+Round&display=swap" rel="stylesheet">
+    <style>
+        :root { --bg-body: #F5F7FA; --primary: #7B8FA1; --text-main: #2D3748; }
+        body { font-family: 'Varela Round', 'Noto Sans TC', sans-serif; background-color: var(--bg-body); color: var(--text-main); height: 100vh; overflow: hidden; }
+        .num-font { font-family: 'Varela Round', sans-serif; font-weight: 600; }
+        .nav-item { display: flex; align-items: center; padding: 12px 20px; margin-bottom: 8px; border-radius: 12px; color: #718096; transition: 0.2s; cursor: pointer; }
+        .nav-item.active { background-color: var(--primary); color: white; }
+        .input-std { background: #F7FAFC; border: 1px solid #E2E8F0; border-radius: 10px; padding: 10px 14px; outline: none; width: 100%; }
+        [v-cloak] { display: none; }
+    </style>
+</head>
+<body>
+    <div id="app" v-cloak class="flex flex-col md:flex-row h-screen w-full">
+        <!-- 側邊欄 -->
+        <aside class="hidden md:flex w-64 bg-white border-r flex-col flex-shrink-0 z-20">
+            <div class="p-8 pb-4"><h1 class="text-2xl font-bold text-gray-800"><i class="fa-solid fa-leaf text-[#7B8FA1]"></i> Ossen 記帳</h1></div>
+            <div class="px-4 mb-6">
+                <input type="month" v-model="currentMonth" class="bg-gray-50 border rounded-xl w-full p-2 text-center font-bold text-gray-700 outline-none">
+            </div>
+            <nav class="flex-1 px-4 space-y-1">
+                <div @click="currentTab = 'public'" :class="['nav-item', currentTab === 'public' ? 'active' : '']">
+                    <i class="fa-solid fa-piggy-bank w-5 mr-3 text-center"></i> 公費紀錄
+                </div>
+                <div @click="currentTab = 'personal'" :class="['nav-item', currentTab === 'personal' ? 'active' : '']">
+                    <i class="fa-solid fa-wallet w-5 mr-3 text-center"></i> 生活開支
+                </div>
+            </nav>
+        </aside>
+
+        <!-- 主內容區 -->
+        <main class="flex-1 flex flex-col min-w-0 bg-[#F5F7FA] overflow-hidden">
+            <header class="bg-white border-b px-8 py-4 flex justify-between items-center shadow-sm z-10">
+                <h2 class="text-xl font-bold text-gray-800">{{ currentTab === 'personal' ? '生活開支' : '公費紀錄' }}</h2>
+            </header>
+
+            <div class="flex-1 overflow-y-auto p-4 md:p-8 pb-24">
+                <div class="max-w-5xl mx-auto space-y-6">
+                    
+                    <!-- 統計卡片 -->
+                    <div class="bg-white p-6 rounded-2xl shadow-sm border border-gray-100 flex justify-around items-center">
+                        <div class="text-center">
+                            <div class="text-xs text-gray-400 mb-1">{{ currentTab === 'public' ? '公費總額' : '本月收入' }}</div>
+                            <div class="text-2xl font-bold text-[#95B8A6] num-font">+ {{ formatNumber(monthTotalIncome) }}</div>
+                        </div>
+                        <div class="h-10 w-px bg-gray-200" v-if="currentTab === 'personal'"></div>
+                        <div class="text-center" v-if="currentTab === 'personal'">
+                            <div class="text-xs text-gray-400 mb-1">本月支出</div>
+                            <div class="text-xl font-bold text-[#D4A5A5] num-font">- {{ formatNumber(monthTotalExpense) }}</div>
+                        </div>
+                        <div class="h-10 w-px bg-gray-200" v-if="currentTab === 'personal'"></div>
+                        <div class="text-center" v-if="currentTab === 'personal'">
+                            <div class="text-xs text-gray-400 mb-1">其中刷卡</div>
+                            <div class="text-xl font-bold text-blue-400 num-font">- {{ formatNumber(monthCardExpense) }}</div>
+                        </div>
+                    </div>
+
+                    <!-- 快速記帳區塊 -->
+                    <div class="bg-white p-4 rounded-2xl shadow-sm border border-blue-50 flex flex-wrap items-center gap-3">
+                        <input type="date" v-model="form.date" class="input-std w-auto">
+                        
+                        <!-- 動態顯示收支按鈕或固定標籤 -->
+                        <div v-if="currentTab === 'personal'" class="flex bg-gray-100 p-1 rounded-lg">
+                            <button @click="form.type='expense'" :class="['px-3 py-1.5 rounded-md text-sm font-bold', form.type==='expense'?'bg-white shadow text-red-500':'text-gray-400']">支</button>
+                            <button @click="form.type='income'" :class="['px-3 py-1.5 rounded-md text-sm font-bold', form.type==='income'?'bg-white shadow text-green-500':'text-gray-400']">收</button>
+                        </div>
+                        <div v-else class="px-3 py-1.5 bg-green-100 text-green-600 rounded-md text-sm font-bold">公費收入</div>
+
+                        <!-- 只有生活開支顯示支付方式 -->
+                        <select v-if="currentTab === 'personal' && form.type === 'expense'" v-model="form.paymentMethod" class="input-std w-24">
+                            <option value="cash">現金</option>
+                            <option value="card">刷卡</option>
+                        </select>
+
+                        <input type="text" v-model="form.item" placeholder="項目說明 (例如: 收到公費)" class="input-std flex-[2]">
+                        <input type="number" v-model.number="form.amount" placeholder="金額" class="input-std w-32 font-bold num-font text-lg" @keyup.enter="submitForm">
+                        
+                        <button @click="submitForm" class="w-10 h-10 bg-[#7B8FA1] text-white rounded-lg flex items-center justify-center hover:bg-gray-600 transition active:scale-95">
+                            <i class="fa-solid fa-plus"></i>
+                        </button>
+                    </div>
+
+                    <!-- 紀錄列表 -->
+                    <div class="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden">
+                        <table class="w-full text-left border-collapse">
+                            <thead class="bg-gray-50 text-gray-500 text-xs uppercase tracking-wider font-semibold border-b">
+                                <tr>
+                                    <th class="p-4">日期</th>
+                                    <th class="p-4" v-if="currentTab === 'personal'">方式</th>
+                                    <th class="p-4">項目說明</th>
+                                    <th class="p-4 text-right">金額</th>
+                                </tr>
+                            </thead>
+                            <tbody class="divide-y divide-gray-50">
+                                <tr v-for="entry in filteredEntries" :key="entry.id" class="hover:bg-gray-50 transition">
+                                    <td class="p-4 text-gray-500 text-sm">{{ formatDateShort(entry.date) }}</td>
+                                    <td class="p-4" v-if="currentTab === 'personal'">
+                                        <span v-if="entry.type === 'expense'" :class="['px-2 py-1 rounded text-xs font-bold', entry.paymentMethod === 'card' ? 'bg-blue-100 text-blue-600' : 'bg-orange-100 text-orange-600']">
+                                            {{ entry.paymentMethod === 'card' ? '💳 刷卡' : '💵 現金' }}
+                                        </span>
+                                        <span v-else class="px-2 py-1 rounded text-xs font-bold bg-green-100 text-green-600">收入</span>
+                                    </td>
+                                    <td class="p-4 font-bold text-gray-800">{{ entry.item }}</td>
+                                    <td :class="['p-4 text-right font-bold num-font text-base', entry.type === 'income' ? 'text-[#95B8A6]' : 'text-[#D4A5A5]']">
+                                        {{ entry.type === 'income' ? '+' : '-' }}{{ formatNumber(entry.amount) }}
+                                    </td>
+                                </tr>
+                                <tr v-if="filteredEntries.length === 0"><td :colspan="currentTab === 'personal' ? 4 : 3" class="p-8 text-center text-gray-400 text-sm">目前尚無紀錄</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+            
+            <!-- 手機版底部導覽 -->
+            <div class="md:hidden bg-white border-t fixed bottom-0 left-0 w-full flex justify-around z-20 pb-safe">
+                <button @click="currentTab='public'" :class="['flex flex-col items-center justify-center py-2 flex-1', currentTab==='public'?'text-[#7B8FA1] font-bold':'text-gray-400 text-sm']"><i class="fa-solid fa-piggy-bank mb-1"></i><span>公費</span></button>
+                <button @click="currentTab='personal'" :class="['flex flex-col items-center justify-center py-2 flex-1', currentTab==='personal'?'text-[#7B8FA1] font-bold':'text-gray-400 text-sm']"><i class="fa-solid fa-wallet mb-1"></i><span>生活</span></button>
+            </div>
+        </main>
+    </div>
+
+    <!-- Firebase 與 Vue 邏輯 -->
+    <script type="module">
+        import { createApp, ref, computed, onMounted, watch } from 'https://unpkg.com/vue@3/dist/vue.esm-browser.js';
+        
+        // 載入瀏覽器版的 Firebase
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-app.js";
+        import { getFirestore, collection, addDoc, onSnapshot, query, orderBy } from "https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore.js";
+
+        // 這是你提供的全新 Firebase 金鑰
+        const firebaseConfig = {
+            apiKey: "AIzaSyDVXmdKhCHkJGE1CdoIF0qfwhVbRRu4lT0",
+            authDomain: "ossen-money-open.firebaseapp.com",
+            projectId: "ossen-money-open",
+            storageBucket: "ossen-money-open.firebasestorage.app",
+            messagingSenderId: "737552427070",
+            appId: "1:737552427070:web:c9b2f4b30f8075cfc8496f",
+            measurementId: "G-BVWVJC7R3T"
+        };
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+
+        createApp({
+            setup() {
+                const currentTab = ref('public'); // 預設打開是公費紀錄
+                const currentMonth = ref(new Date().toISOString().slice(0, 7));
+                const transactions = ref([]);
+                
+                const form = ref({ 
+                    date: new Date().toISOString().split('T')[0], 
+                    type: 'income', 
+                    paymentMethod: 'cash', 
+                    amount: '', 
+                    item: '' 
+                });
+
+                // 監聽帳本切換：如果是公費，強制鎖定為收入
+                watch(currentTab, (newTab) => {
+                    if (newTab === 'public') {
+                        form.value.type = 'income';
+                        form.value.paymentMethod = 'cash'; 
+                    } else {
+                        form.value.type = 'expense';
+                    }
+                });
+
+                // 即時讀取資料庫
+                onMounted(() => {
+                    const q = query(collection(db, "open_transactions"), orderBy("createdAt", "desc"));
+                    onSnapshot(q, (snap) => { 
+                        transactions.value = snap.docs.map(d => ({ ...d.data(), id: d.id })); 
+                    });
+                });
+
+                const filteredEntries = computed(() => {
+                    return transactions.value.filter(t => t.ledger === currentTab.value && t.date.startsWith(currentMonth.value));
+                });
+
+                const monthTotalIncome = computed(() => filteredEntries.value.filter(t=>t.type==='income').reduce((a,b)=>a+b.amount,0));
+                const monthTotalExpense = computed(() => filteredEntries.value.filter(t=>t.type==='expense').reduce((a,b)=>a+b.amount,0));
+                const monthCardExpense = computed(() => filteredEntries.value.filter(t=>t.type==='expense' && t.paymentMethod === 'card').reduce((a,b)=>a+b.amount,0));
+
+                const submitForm = async () => { 
+                    if (!form.value.item || !form.value.amount) {
+                        alert("請輸入項目和金額！");
+                        return;
+                    }
+                    try { 
+                        await addDoc(collection(db, "open_transactions"), { 
+                            date: form.value.date,
+                            type: form.value.type,
+                            paymentMethod: currentTab.value === 'public' ? 'cash' : form.value.paymentMethod,
+                            amount: Number(form.value.amount),
+                            item: form.value.item,
+                            ledger: currentTab.value, 
+                            createdAt: new Date().getTime() // 使用時間戳記排序
+                        }); 
+                        form.value.amount = ''; 
+                        form.value.item = ''; 
+                    } catch(e) { 
+                        console.error(e);
+                        alert("儲存失敗，請檢查 Firebase 資料庫權限設定是否已開啟。"); 
+                    } 
+                };
+
+                const formatNumber = (num) => new Intl.NumberFormat().format(num || 0);
+                const formatDateShort = (s) => { const d = new Date(s); return `${d.getMonth()+1}/${d.getDate()}`; };
+
+                return { currentTab, currentMonth, filteredEntries, form, monthTotalIncome, monthTotalExpense, monthCardExpense, submitForm, formatNumber, formatDateShort };
+            }
+        }).mount('#app');
+    </script>
+</body>
+</html>
