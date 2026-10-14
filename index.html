@@ -138,7 +138,6 @@
                 const currentMonth = ref(new Date().toISOString().slice(0, 7));
                 const transactions = ref([]);
                 
-                // 初始金額設定
                 const initialBalance = ref(6786);
                 const tempInitialBalance = ref(6786);
                 
@@ -149,13 +148,11 @@
                 const editForm = ref({ id: '', date: '', amount: '', item: '' });
 
                 onMounted(() => {
-                    // 讀取所有紀錄
                     const q = query(collection(db, "public_funds"), orderBy("createdAt", "desc"));
                     onSnapshot(q, (snap) => { 
                         transactions.value = snap.docs.map(d => ({ ...d.data(), id: d.id })); 
                     });
 
-                    // 讀取初始金額設定
                     onSnapshot(doc(db, "settings", "public"), (d) => {
                         if (d.exists()) {
                             initialBalance.value = d.data().initialBalance;
@@ -164,12 +161,20 @@
                     });
                 });
 
-                // 過濾出「當月」的紀錄
+                // 排序優化：優先依照日期降冪，若日期相同則依照建立時間 (createdAt) 降冪排序
                 const filteredEntries = computed(() => {
-                    return transactions.value.filter(t => t.date.startsWith(currentMonth.value));
+                    return transactions.value
+                        .filter(t => t.date.startsWith(currentMonth.value))
+                        .sort((a, b) => {
+                            const dateCompare = new Date(b.date) - new Date(a.date);
+                            if (dateCompare !== 0) return dateCompare;
+                            
+                            const timeA = Number(a.createdAt) || 0;
+                            const timeB = Number(b.createdAt) || 0;
+                            return timeB - timeA;
+                        });
                 });
 
-                // 計算「總資產」: 初始金額 + 雲端所有紀錄的加總
                 const totalPublicFunds = computed(() => {
                     const recordsSum = transactions.value.reduce((sum, current) => sum + current.amount, 0);
                     return initialBalance.value + recordsSum;
@@ -193,7 +198,7 @@
                             date: form.value.date,
                             amount: Number(form.value.amount),
                             item: form.value.item,
-                            createdAt: new Date(form.value.date).getTime()
+                            createdAt: new Date().getTime()
                         }); 
                         form.value.amount = ''; form.value.item = ''; 
                     } catch(e) { alert("儲存失敗"); } 
